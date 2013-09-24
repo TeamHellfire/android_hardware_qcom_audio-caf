@@ -17,8 +17,8 @@ endif
 ifeq ($(strip $(QCOM_MULTI_VOICE_SESSION_ENABLED)),true)
     LOCAL_CFLAGS += -DQCOM_MULTI_VOICE_SESSION_ENABLED
 endif
-ifneq ($(strip $(QCOM_AUDIO_FORMAT_ENABLED)),false)
-    common_cflags += -DQCOM_AUDIO_FORMAT_ENABLED
+ifeq ($(strip $(QCOM_AUDIO_FORMAT_ENABLED)),true)
+    LOCAL_CFLAGS += -DQCOM_AUDIO_FORMAT_ENABLED
 endif
 ifneq ($(strip $(QCOM_CSDCLIENT_ENABLED)),false)
     common_cflags += -DQCOM_CSDCLIENT_ENABLED
@@ -196,15 +196,15 @@ LOCAL_C_INCLUDES += system/media/audio_utils/include
 LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
 LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
-ifeq ($(call is-board-platform,msm8974),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8974)
   LOCAL_MODULE := audio.primary.msm8974
 endif
 
-ifeq ($(call is-board-platform,msm8960),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8960)
   LOCAL_MODULE := audio.primary.msm8960
 endif
 
-ifeq ($(call is-board-platform,msm8610),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8610)
   LOCAL_MODULE := audio.primary.msm8610
 endif
 
@@ -225,11 +225,11 @@ ifeq ($(call is-board-platform,msm8974),true)
   LOCAL_MODULE := audio_policy.msm8974
 endif
 
-ifeq ($(call is-board-platform,msm8960),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8960)
   LOCAL_MODULE := audio_policy.msm8960
 endif
 
-ifeq ($(call is-board-platform,msm8610),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8610)
   LOCAL_MODULE := audio_policy.msm8610
 endif
 

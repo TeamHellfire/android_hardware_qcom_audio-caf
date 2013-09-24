@@ -507,7 +507,7 @@ status_t AudioHardwareALSA::setMode(int mode)
     }
 
     if (mode == AUDIO_MODE_IN_CALL) {
-        if (mCallState <= CALL_INACTIVE) {
+        if (mCallState == CALL_INACTIVE) {
 #ifndef QCOM_MULTI_VOICE_SESSION_ENABLED
             ALOGV("%s() defaulting vsid and call state",__func__);
             mCallState = CALL_ACTIVE;
@@ -599,7 +599,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         if(mMode != AUDIO_MODE_IN_CALL){
            return NO_ERROR;
         }
-        doRouting(0);
+        doRouting(0,NULL);
         param.remove(key);
     }
 #ifdef QCOM_FLUENCE_ENABLED
@@ -626,7 +626,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             ALOGV("Fluence feature Disabled");
         }
         mALSADevice->setFlags(mDevSettingsFlag);
-        doRouting(0);
+        doRouting(0,NULL);
         param.remove(key);
     }
 #endif
@@ -674,7 +674,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
             mDevSettingsFlag &= (~ANC_FLAG);
         }
         mALSADevice->setFlags(mDevSettingsFlag);
-        doRouting(0);
+        doRouting(0,NULL);
         param.remove(key);
     }
 #endif
@@ -683,7 +683,7 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
     if (param.getInt(key, device) == NO_ERROR) {
         // Ignore routing if device is 0.
         if(device) {
-            doRouting(device);
+            doRouting(device,NULL);
         }
         param.remove(key);
     }
@@ -832,17 +832,17 @@ status_t AudioHardwareALSA::setParameters(const String8& keyValuePairs)
         key = String8(CALL_STATE_KEY);
         if (param.getInt(key, (int &)call_state) == NO_ERROR) {
             param.remove(key);
-        if (isAnyCallActive() || (call_state == CALL_ACTIVE)) {
-            mVSID = vsid;
-            mCallState = call_state;
-            ALOGD("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
-        }
-        if(isAnyCallActive()
+            if (isAnyCallActive() || (call_state == CALL_ACTIVE)) {
+                mVSID = vsid;
+                mCallState = call_state;
+                ALOGD("%s() vsid:%x, callstate:%x", __func__, mVSID, call_state);
+            }
+            if(isAnyCallActive()
 #ifdef QCOM_MULTI_VOICE_SESSION_ENABLED
-          | mMode == AUDIO_MODE_IN_CALL
+               || mMode == AUDIO_MODE_IN_CALL
 #endif
-         )
-         doRouting(0);
+              )
+               doRouting(0,NULL);
         }
         param.remove(key);
     }
@@ -998,7 +998,7 @@ void AudioHardwareALSA::startUsbRecordingIfNotStarted(){
 }
 #endif
 
-status_t AudioHardwareALSA::doRouting(int device)
+status_t AudioHardwareALSA::doRouting(int device, char* useCase)
 {
     Mutex::Autolock autoLock(mLock);
     int newMode = mode();
@@ -1127,11 +1127,23 @@ status_t AudioHardwareALSA::doRouting(int device)
             it--;
             status_t err = NO_ERROR;
             uint32_t activeUsecase = useCaseStringToEnum(it->useCase);
+
+            //If required usecase is not null, go through mDeviceList to find last matching alsa_handle_t.
+            //For FM we don't open an output stream. Hence required usecase shouldn't be considered.
+            if ( (useCase != NULL) && (activeUsecase != USECASE_FM) ) {
+                for(ALSAHandleList::iterator it2 = mDeviceList.begin(); it2 != mDeviceList.end(); it2++) {
+                    if (!strncmp(useCase, it2->useCase,sizeof(useCase))) {
+                            it = it2;
+                            ALOGV("found matching required usecase:%s device:%x",it->useCase,it->devices);
+                            activeUsecase = useCaseStringToEnum(it->useCase);
+                            break;
+                        }
+                }
+            }
+            ALOGV("Dorouting updated usecase:%s device:%x activeUsecase",it->useCase, it->devices, activeUsecase);
             if (!((device & AudioSystem::DEVICE_OUT_ALL_A2DP) &&
                   (mCurRxDevice & AUDIO_DEVICE_OUT_ALL_USB))) {
-                if ((activeUsecase == USECASE_HIFI_LOW_POWER) ||
-                    (activeUsecase == USECASE_HIFI_TUNNEL)) {
-                    if (device != mCurRxDevice) {
+                   if (device != mCurRxDevice) {
                         if((isExtOutDevice(mCurRxDevice)) &&
                            (isExtOutDevice(device))) {
                             activeUsecase = getExtOutActiveUseCases_l();
@@ -1141,24 +1153,6 @@ status_t AudioHardwareALSA::doRouting(int device)
                         mALSADevice->route(&(*it),(uint32_t)device, newMode);
                     }
                     err = startPlaybackOnExtOut_l(activeUsecase);
-                } else {
-                    //WHY NO check for prev device here?
-                    if (device != mCurRxDevice) {
-                        if((isExtOutDevice(mCurRxDevice)) &&
-                            (isExtOutDevice(device))) {
-                            activeUsecase = getExtOutActiveUseCases_l();
-                            stopPlaybackOnExtOut_l(activeUsecase);
-                            mALSADevice->route(&(*it),(uint32_t)device, newMode);
-                            mRouteAudioToExtOut = true;
-                            startPlaybackOnExtOut_l(activeUsecase);
-                        } else {
-                           mALSADevice->route(&(*it),(uint32_t)device, newMode);
-                        }
-                    }
-                    if (activeUsecase == USECASE_FM){
-                        err = startPlaybackOnExtOut_l(activeUsecase);
-                    }
-                }
                 if(err) {
                     ALOGW("startPlaybackOnExtOut_l for hardware output failed err = %d", err);
                     stopPlaybackOnExtOut_l(activeUsecase);
