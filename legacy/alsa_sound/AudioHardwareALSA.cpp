@@ -2739,6 +2739,7 @@ status_t AudioHardwareALSA::openExtOutput(int device) {
     ALOGV("openExtOutput");
     status_t err = NO_ERROR;
     Mutex::Autolock autolock1(mExtOutMutex);
+     Mutex::Autolock autolock2(mExtOutMutexWrite);
     if (device & AudioSystem::DEVICE_OUT_ALL_A2DP) {
         err= openA2dpOutput();
         if(err) {

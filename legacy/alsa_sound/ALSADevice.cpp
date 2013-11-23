@@ -2653,6 +2653,8 @@ ssize_t  ALSADevice::readFromProxy(void **captureBuffer , ssize_t *bufferSize) {
                capture_handle->underruns++;
                capture_handle->running = 0;
                capture_handle->start = 0;
+               /* sleeping for 10 ms before retrying */
+               usleep(10000);
                continue;
         } else if (err != NO_ERROR) {
                 ALOGE("Error: Sync ptr returned %d", err);
