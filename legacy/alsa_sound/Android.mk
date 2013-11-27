@@ -17,7 +17,7 @@ endif
 ifeq ($(strip $(QCOM_MULTI_VOICE_SESSION_ENABLED)),true)
     LOCAL_CFLAGS += -DQCOM_MULTI_VOICE_SESSION_ENABLED
 endif
-ifeq ($(strip $(QCOM_AUDIO_FORMAT_ENABLED)),true)
+ifneq ($(strip $(QCOM_AUDIO_FORMAT_ENABLED)),false)
     LOCAL_CFLAGS += -DQCOM_AUDIO_FORMAT_ENABLED
 endif
 ifneq ($(strip $(QCOM_CSDCLIENT_ENABLED)),false)
@@ -221,7 +221,7 @@ LOCAL_SRC_FILES := \
     audio_policy_hal.cpp \
     AudioPolicyManagerALSA.cpp
 
-ifeq ($(call is-board-platform,msm8974),true)
+ifeq ($(TARGET_BOARD_PLATFORM),msm8974)
   LOCAL_MODULE := audio_policy.msm8974
 endif
 

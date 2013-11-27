@@ -507,7 +507,7 @@ status_t AudioHardwareALSA::setMode(int mode)
     }
 
     if (mode == AUDIO_MODE_IN_CALL) {
-        if (mCallState == CALL_INACTIVE) {
+        if (mCallState <= CALL_INACTIVE) {
 #ifndef QCOM_MULTI_VOICE_SESSION_ENABLED
             ALOGV("%s() defaulting vsid and call state",__func__);
             mCallState = CALL_ACTIVE;
@@ -517,9 +517,13 @@ status_t AudioHardwareALSA::setMode(int mode)
             ALOGV("%s no op",__func__);
         }
     } else if (mode == AUDIO_MODE_NORMAL) {
+        if (mCallState != CALL_INACTIVE) {
+            // Immediate routing update on mode transition to normal
 #ifndef QCOM_MULTI_VOICE_SESSION_ENABLED
-        mCallState = CALL_INACTIVE;
+            mCallState = CALL_INACTIVE;
 #endif
+            doRouting(0);
+        }
     }
 
     return status;
