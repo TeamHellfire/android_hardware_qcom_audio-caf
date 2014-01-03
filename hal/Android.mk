@@ -47,17 +47,24 @@ ifneq ($(strip $(AUDIO_FEATURE_DISABLED_USBAUDIO)),true)
     LOCAL_CFLAGS += -DUSB_HEADSET_ENABLED
     LOCAL_SRC_FILES += audio_extn/usb.c
 endif
+ifneq ($(strip $(AUDIO_FEATURE_DISABLED_HFP)),true)
+    LOCAL_CFLAGS += -DHFP_ENABLED
+    LOCAL_SRC_FILES += audio_extn/hfp.c
+endif
 
+ifneq ($(QC_PROP_ROOT),)
 ifneq ($(strip $(AUDIO_FEATURE_DISABLED_SSR)),true)
     LOCAL_CFLAGS += -DSSR_ENABLED
     LOCAL_SRC_FILES += audio_extn/ssr.c
     LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/surround_sound/
+endif
 endif
 
 ifneq ($(strip $(AUDIO_FEATURE_DISABLED_MULTI_VOICE_SESSIONS)),true)
     LOCAL_CFLAGS += -DMULTI_VOICE_SESSION_ENABLED
     LOCAL_SRC_FILES += voice_extn/voice_extn.c
     LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+    LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
 ifneq ($(strip $(AUDIO_FEATURE_DISABLED_INCALL_MUSIC)),true)
     LOCAL_CFLAGS += -DINCALL_MUSIC_ENABLED
@@ -74,6 +81,7 @@ ifneq ($(filter msm8974,$(TARGET_BOARD_PLATFORM)),)
     LOCAL_CFLAGS += -DSPKR_PROT_ENABLED
     LOCAL_SRC_FILES += audio_extn/spkr_protection.c
     LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+    LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 endif
 endif
 
@@ -90,6 +98,7 @@ endif
 ifneq ($(strip $(AUDIO_FEATURE_DISABLED_DS1_DOLBY_DDP)),true)
     LOCAL_CFLAGS += -DDS1_DOLBY_DDP_ENABLED
     LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+    LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 endif
 
 LOCAL_SHARED_LIBRARIES := \
@@ -109,10 +118,12 @@ LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/audio_extn \
 	$(LOCAL_PATH)/voice_extn
 
+ifneq ($(QC_PROP_ROOT),)
 ifeq ($(strip $(AUDIO_FEATURE_ENABLED_LISTEN)),true)
     LOCAL_CFLAGS += -DAUDIO_LISTEN_ENABLED
     LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/mm-audio/audio-listen
     LOCAL_SRC_FILES += audio_extn/listen.c
+endif
 endif
 
 ifeq ($(strip $(AUDIO_FEATURE_ENABLED_AUXPCM_BT)),true)

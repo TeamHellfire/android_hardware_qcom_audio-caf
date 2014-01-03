@@ -282,7 +282,13 @@ static int update_call_states(struct audio_device *adev,
         session->state.new = call_state;
         voice_extn_is_in_call(adev, &is_in_call);
         ALOGD("%s is_in_call:%d mode:%d\n", __func__, is_in_call, adev->mode);
-        if (is_in_call || adev->mode == AUDIO_MODE_IN_CALL) {
+        /* Dont start voice call before device routing for voice usescases has
+         * occured, otherwise voice calls will be started unintendedly on
+         * speaker.
+         */
+        if (is_in_call ||
+            (adev->mode == AUDIO_MODE_IN_CALL &&
+             adev->primary_output->devices != AUDIO_DEVICE_OUT_SPEAKER)) {
             /* Device routing is not triggered for voice calls on the subsequent
              * subs, Hence update the call states if voice call is already
              * active on other sub.
@@ -434,6 +440,23 @@ done:
     return ret;
 }
 
+void voice_extn_get_parameters(const struct audio_device *adev,
+                               struct str_parms *query,
+                               struct str_parms *reply)
+{
+    int ret;
+    char value[32]={0};
+    char *str = NULL;
+
+    ret = str_parms_get_str(query, "audio_mode", value,
+                            sizeof(value));
+    if (ret >= 0) {
+        str_parms_add_int(reply, "audio_mode", adev->mode);
+    }
+
+    ALOGV("%s: returns %s", __func__, str_parms_to_str(reply));
+}
+
 void voice_extn_out_get_parameters(struct stream_out *out,
                                    struct str_parms *query,
                                    struct str_parms *reply)
@@ -448,6 +471,7 @@ void voice_extn_in_get_parameters(struct stream_in *in,
     voice_extn_compress_voip_in_get_parameters(in, query, reply);
 }
 
+#ifdef INCALL_MUSIC_ENABLED
 int voice_extn_check_and_set_incall_music_usecase(struct audio_device *adev,
                                                   struct stream_out *out)
 {
@@ -469,4 +493,4 @@ int voice_extn_check_and_set_incall_music_usecase(struct audio_device *adev,
 
     return 0;
 }
-
+#endif
