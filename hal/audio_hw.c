@@ -295,6 +295,18 @@ int enable_snd_device(struct audio_device *adev,
         return 0;
     }
 
+    /* Set BT sample rate before enabling the devices. Adding sample rate mixer
+     * control in use-case does not work because rate update takes place after
+     * AFE port open due to the limitation of mixer control order execution.
+     */
+    if (snd_device == SND_DEVICE_OUT_BT_SCO) {
+        audio_route_apply_path(adev->audio_route, BT_SCO_SAMPLE_RATE);
+        audio_route_update_mixer(adev->audio_route);
+    } else if (snd_device == SND_DEVICE_OUT_BT_SCO_WB) {
+        audio_route_apply_path(adev->audio_route, BT_SCO_WB_SAMPLE_RATE);
+        audio_route_update_mixer(adev->audio_route);
+    }
+
     /* start usb playback thread */
     if(SND_DEVICE_OUT_USB_HEADSET == snd_device ||
        SND_DEVICE_OUT_SPEAKER_AND_USB_HEADSET == snd_device)
@@ -550,21 +562,6 @@ static int read_hdmi_channel_masks(struct stream_out *out)
     return ret;
 }
 
-static void update_devices_for_all_voice_usecases(struct audio_device *adev)
-{
-    struct listnode *node;
-    struct audio_usecase *usecase;
-
-    list_for_each(node, &adev->usecase_list) {
-        usecase = node_to_item(node, struct audio_usecase, list);
-        if (usecase->type == VOICE_CALL) {
-            ALOGV("%s: updating device for usecase:%s", __func__,
-                  use_case_table[usecase->id]);
-            select_devices(adev, usecase->id);
-        }
-    }
-}
-
 static audio_usecase_t get_voice_usecase_id_from_list(struct audio_device *adev)
 {
     struct audio_usecase *usecase;
@@ -602,6 +599,7 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
     struct audio_usecase *vc_usecase = NULL;
     struct audio_usecase *voip_usecase = NULL;
     struct audio_usecase *hfp_usecase = NULL;
+    audio_usecase_t hfp_ucid;
     struct listnode *node;
     int status = 0;
 
@@ -641,7 +639,8 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
                     out_snd_device = voip_usecase->out_snd_device;
             }
         } else if (audio_extn_hfp_is_active(adev)) {
-            hfp_usecase = get_usecase_from_list(adev, USECASE_AUDIO_HFP_SCO);
+            hfp_ucid = audio_extn_hfp_get_usecase();
+            hfp_usecase = get_usecase_from_list(adev, hfp_ucid);
             if (hfp_usecase->devices & AUDIO_DEVICE_OUT_ALL_CODEC_BACKEND) {
                    in_snd_device = hfp_usecase->in_snd_device;
                    out_snd_device = hfp_usecase->out_snd_device;
@@ -703,6 +702,15 @@ int select_devices(struct audio_device *adev, audio_usecase_t uc_id)
         disable_audio_route(adev, usecase, true);
         disable_snd_device(adev, usecase->in_snd_device, false);
     }
+
+    /* Applicable only on the targets that has external modem.
+     * New device information should be sent to modem before enabling
+     * the devices to reduce in-call device switch time.
+     */
+    if (usecase->type == VOICE_CALL)
+        status = platform_switch_voice_call_enable_device_config(adev->platform,
+                                                                 out_snd_device,
+                                                                 in_snd_device);
 
     /* Enable new sound devices */
     if (out_snd_device != SND_DEVICE_NONE) {
@@ -1461,7 +1469,7 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
             } else if ((adev->mode == AUDIO_MODE_IN_CALL) &&
                             voice_is_in_call(adev) &&
                             (out == adev->primary_output)) {
-                update_devices_for_all_voice_usecases(adev);
+                voice_update_devices_for_all_voice_usecases(adev);
             }
         }
 
@@ -1913,11 +1921,10 @@ static int in_set_parameters(struct audio_stream *stream, const char *kvpairs)
                 (voice_extn_compress_voip_is_format_supported(in->format)) &&
                 (in->config.rate == 8000 || in->config.rate == 16000) &&
                 (popcount(in->channel_mask) == 1)) {
-                ret = voice_extn_compress_voip_open_input_stream(in);
-                if (ret != 0) {
+                err = voice_extn_compress_voip_open_input_stream(in);
+                if (err != 0) {
                     ALOGE("%s: Compress voip input cannot be opened, error:%d",
-                          __func__, ret);
-                    goto done;
+                          __func__, err);
                 }
             }
         }

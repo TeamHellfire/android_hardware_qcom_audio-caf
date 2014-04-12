@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  *
  * Copyright (C) 2013 The Android Open Source Project
@@ -153,16 +153,27 @@ int bassboost_set_device(effect_context_t *context, uint32_t device)
     bass_ctxt->device = device;
     if((device == AUDIO_DEVICE_OUT_SPEAKER) ||
        (device == AUDIO_DEVICE_OUT_BLUETOOTH_SCO_CARKIT) ||
-       (device == AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER)) {
+       (device == AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER) ||
+       (device == AUDIO_DEVICE_OUT_PROXY) ||
+       (device == AUDIO_DEVICE_OUT_AUX_DIGITAL) ||
+       (device == AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET)) {
         if (offload_bassboost_get_enable_flag(&(bass_ctxt->offload_bass))) {
             offload_bassboost_set_enable_flag(&(bass_ctxt->offload_bass), false);
             bass_ctxt->temp_disabled = true;
+            if (bass_ctxt->ctl)
+                offload_bassboost_send_params(bass_ctxt->ctl,
+                                              bass_ctxt->offload_bass,
+                                              OFFLOAD_SEND_BASSBOOST_ENABLE_FLAG);
         }
     } else {
         if (!offload_bassboost_get_enable_flag(&(bass_ctxt->offload_bass)) &&
             bass_ctxt->temp_disabled) {
             offload_bassboost_set_enable_flag(&(bass_ctxt->offload_bass), true);
             bass_ctxt->temp_disabled = false;
+            if (bass_ctxt->ctl)
+                offload_bassboost_send_params(bass_ctxt->ctl,
+                                              bass_ctxt->offload_bass,
+                                              OFFLOAD_SEND_BASSBOOST_ENABLE_FLAG);
         }
     }
     offload_bassboost_set_device(&(bass_ctxt->offload_bass), device);
@@ -211,7 +222,9 @@ int bassboost_enable(effect_context_t *context)
     bassboost_context_t *bass_ctxt = (bassboost_context_t *)context;
 
     ALOGV("%s", __func__);
-    if (!offload_bassboost_get_enable_flag(&(bass_ctxt->offload_bass))) {
+
+    if (!offload_bassboost_get_enable_flag(&(bass_ctxt->offload_bass)) &&
+        !(bass_ctxt->temp_disabled)) {
         offload_bassboost_set_enable_flag(&(bass_ctxt->offload_bass), true);
         if (bass_ctxt->ctl && bass_ctxt->strength)
             offload_bassboost_send_params(bass_ctxt->ctl,
