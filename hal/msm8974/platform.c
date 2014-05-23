@@ -44,15 +44,15 @@
 #define COMPRESS_OFFLOAD_FRAGMENT_SIZE (32 * 1024)
 
 /* Used in calculating fragment size for pcm offload */
-#define PCM_OFFLOAD_BUFFER_DURATION_FOR_AV 2000 /* 2 secs */
-#define PCM_OFFLOAD_BUFFER_DURATION_FOR_AV_STREAMING 100 /* 100 millisecs */
+#define PCM_OFFLOAD_BUFFER_DURATION_FOR_AV 1000 /* 1 sec */
+#define PCM_OFFLOAD_BUFFER_DURATION_FOR_AV_STREAMING 80 /* 80 millisecs */
 
 /* MAX PCM fragment size cannot be increased  further due
  * to flinger's cblk size of 1mb,and it has to be a multiple of
  * 24 - lcm of channels supported by DSP
  */
 #define MAX_PCM_OFFLOAD_FRAGMENT_SIZE (240 * 1024)
-#define MIN_PCM_OFFLOAD_FRAGMENT_SIZE (32 * 1024)
+#define MIN_PCM_OFFLOAD_FRAGMENT_SIZE (4 * 1024)
 
 #define ALIGN( num, to ) (((num) + (to-1)) & (~(to-1)))
 /*
@@ -197,6 +197,7 @@ static char * device_table[SND_DEVICE_MAX] = {
     [SND_DEVICE_IN_VOICE_TTY_FULL_HEADSET_MIC] = "voice-tty-full-headset-mic",
     [SND_DEVICE_IN_VOICE_TTY_VCO_HANDSET_MIC] = "voice-tty-vco-handset-mic",
     [SND_DEVICE_IN_VOICE_TTY_HCO_HEADSET_MIC] = "voice-tty-hco-headset-mic",
+    [SND_DEVICE_IN_VOICE_REC_HEADSET_MIC] = "headset-mic",
     [SND_DEVICE_IN_VOICE_REC_MIC] = "voice-rec-mic",
     [SND_DEVICE_IN_VOICE_REC_MIC_NS] = "voice-rec-mic",
     [SND_DEVICE_IN_VOICE_REC_DMIC_STEREO] = "voice-rec-dmic-ef",
@@ -273,6 +274,7 @@ static int acdb_device_table[SND_DEVICE_MAX] = {
     [SND_DEVICE_IN_VOICE_TTY_FULL_HEADSET_MIC] = 16,
     [SND_DEVICE_IN_VOICE_TTY_VCO_HANDSET_MIC] = 36,
     [SND_DEVICE_IN_VOICE_TTY_HCO_HEADSET_MIC] = 16,
+    [SND_DEVICE_IN_VOICE_REC_HEADSET_MIC] = 8,
     [SND_DEVICE_IN_VOICE_REC_MIC] = 4,
     [SND_DEVICE_IN_VOICE_REC_MIC_NS] = 107,
     [SND_DEVICE_IN_VOICE_REC_DMIC_STEREO] = 34,
@@ -354,6 +356,7 @@ struct snd_device_index snd_device_name_index[SND_DEVICE_MAX] = {
     {TO_NAME_INDEX(SND_DEVICE_IN_VOICE_TTY_FULL_HEADSET_MIC)},
     {TO_NAME_INDEX(SND_DEVICE_IN_VOICE_TTY_VCO_HANDSET_MIC)},
     {TO_NAME_INDEX(SND_DEVICE_IN_VOICE_TTY_HCO_HEADSET_MIC)},
+    {TO_NAME_INDEX(SND_DEVICE_IN_VOICE_REC_HEADSET_MIC)},
     {TO_NAME_INDEX(SND_DEVICE_IN_VOICE_REC_MIC)},
     {TO_NAME_INDEX(SND_DEVICE_IN_VOICE_REC_MIC_NS)},
     {TO_NAME_INDEX(SND_DEVICE_IN_VOICE_REC_DMIC_STEREO)},
@@ -373,20 +376,14 @@ struct snd_device_index snd_device_name_index[SND_DEVICE_MAX] = {
 #define DEEP_BUFFER_PLATFORM_DELAY (29*1000LL)
 #define LOW_LATENCY_PLATFORM_DELAY (13*1000LL)
 
-int set_echo_reference(struct mixer *mixer, const char* ec_ref)
+static void set_echo_reference(struct audio_device *adev, bool enable)
 {
-    struct mixer_ctl *ctl;
-    const char *mixer_ctl_name = "EC_REF_RX";
+    if (enable)
+        audio_route_apply_and_update_path(adev->audio_route, "echo-reference");
+    else
+        audio_route_reset_and_update_path(adev->audio_route, "echo-reference");
 
-    ctl = mixer_get_ctl_by_name(mixer, mixer_ctl_name);
-    if (!ctl) {
-        ALOGE("%s: Could not get ctl for mixer cmd - %s",
-              __func__, mixer_ctl_name);
-        return -EINVAL;
-    }
-    ALOGV("Setting EC Reference: %s", ec_ref);
-    mixer_ctl_set_enum_by_string(ctl, ec_ref);
-    return 0;
+    ALOGV("Setting EC Reference: %d", enable);
 }
 
 static struct csd_data *open_csd_client()
@@ -1235,7 +1232,7 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
             } else if (my_data->fluence_type == FLUENCE_NONE ||
                 my_data->fluence_in_voice_call == false) {
                 snd_device = SND_DEVICE_IN_HANDSET_MIC;
-                set_echo_reference(adev->mixer, EC_REF_RX);
+                set_echo_reference(adev, true);
             } else {
                 snd_device = SND_DEVICE_IN_VOICE_DMIC;
                 adev->acdb_settings |= DMIC_FLAG;
@@ -1268,7 +1265,9 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
             snd_device = SND_DEVICE_IN_CAMCORDER_MIC;
         }
     } else if (source == AUDIO_SOURCE_VOICE_RECOGNITION) {
-        if (in_device & AUDIO_DEVICE_IN_BUILTIN_MIC) {
+        if (in_device & AUDIO_DEVICE_IN_WIRED_HEADSET) {
+            snd_device = SND_DEVICE_IN_VOICE_REC_HEADSET_MIC;
+        } else if (in_device & AUDIO_DEVICE_IN_BUILTIN_MIC) {
             if (channel_count == 2) {
                 snd_device = SND_DEVICE_IN_VOICE_REC_DMIC_STEREO;
                 adev->acdb_settings |= DMIC_FLAG;
@@ -1312,7 +1311,7 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
                 } else if (in_device & AUDIO_DEVICE_IN_WIRED_HEADSET) {
                     snd_device = SND_DEVICE_IN_HEADSET_MIC_FLUENCE;
                 }
-                set_echo_reference(adev->mixer, EC_REF_RX);
+                set_echo_reference(adev, true);
             } else if (adev->active_input->enable_aec) {
                 if (in_device & AUDIO_DEVICE_IN_BACK_MIC) {
                     if (my_data->fluence_type & FLUENCE_DUAL_MIC) {
@@ -1329,7 +1328,7 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
                 } else if (in_device & AUDIO_DEVICE_IN_WIRED_HEADSET) {
                     snd_device = SND_DEVICE_IN_HEADSET_MIC_FLUENCE;
                 }
-                set_echo_reference(adev->mixer, EC_REF_RX);
+                set_echo_reference(adev, true);
             } else if (adev->active_input->enable_ns) {
                 if (in_device & AUDIO_DEVICE_IN_BACK_MIC) {
                     if (my_data->fluence_type & FLUENCE_DUAL_MIC) {
@@ -1346,9 +1345,9 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
                 } else if (in_device & AUDIO_DEVICE_IN_WIRED_HEADSET) {
                     snd_device = SND_DEVICE_IN_HEADSET_MIC_FLUENCE;
                 }
-                set_echo_reference(adev->mixer, "NONE");
+                set_echo_reference(adev, false);
             } else
-                set_echo_reference(adev->mixer, "NONE");
+                set_echo_reference(adev, false);
         }
     } else if (source == AUDIO_SOURCE_MIC) {
         if (in_device & AUDIO_DEVICE_IN_BUILTIN_MIC &&
@@ -1356,7 +1355,7 @@ snd_device_t platform_get_input_snd_device(void *platform, audio_devices_t out_d
             if(my_data->fluence_type & FLUENCE_DUAL_MIC &&
                     my_data->fluence_in_audio_rec) {
                 snd_device = SND_DEVICE_IN_HANDSET_DMIC;
-                set_echo_reference(adev->mixer, EC_REF_RX);
+                set_echo_reference(adev, true);
             }
         }
     } else if (source == AUDIO_SOURCE_FM_RX ||
@@ -1831,14 +1830,21 @@ uint32_t platform_get_pcm_offload_buffer_size(audio_offload_info_t* info)
     } else if (info->has_video && info->is_streaming) {
         fragment_size = (PCM_OFFLOAD_BUFFER_DURATION_FOR_AV_STREAMING
                                      * info->sample_rate
-                                     * bits_per_sample
+                                     * (bits_per_sample >> 3)
                                      * popcount(info->channel_mask))/1000;
 
     } else if (info->has_video) {
         fragment_size = (PCM_OFFLOAD_BUFFER_DURATION_FOR_AV
                                      * info->sample_rate
-                                     * bits_per_sample
+                                     * (bits_per_sample >> 3)
                                      * popcount(info->channel_mask))/1000;
+    }
+
+    char value[PROPERTY_VALUE_MAX] = {0};
+    if((property_get("audio.offload.pcm.buffer.size", value, "")) &&
+            atoi(value)) {
+        fragment_size =  atoi(value) * 1024;
+        ALOGV("Using buffer size from sys prop %d", fragment_size);
     }
 
     fragment_size = ALIGN( fragment_size, 1024);

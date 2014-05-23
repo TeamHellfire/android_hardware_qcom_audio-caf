@@ -88,11 +88,11 @@ int stop_call(struct audio_device *adev, audio_usecase_t usecase_id)
     }
 
     /* 2. Get and set stream specific mixer controls */
-    disable_audio_route(adev, uc_info, true);
+    disable_audio_route(adev, uc_info);
 
     /* 3. Disable the rx and tx devices */
-    disable_snd_device(adev, uc_info->out_snd_device, false);
-    disable_snd_device(adev, uc_info->in_snd_device, true);
+    disable_snd_device(adev, uc_info->out_snd_device);
+    disable_snd_device(adev, uc_info->in_snd_device);
 
     list_remove(&uc_info->list);
     free(uc_info);
@@ -187,6 +187,19 @@ bool voice_is_in_call(struct audio_device *adev)
     }
 
     return in_call;
+}
+
+bool voice_is_in_call_rec_stream(struct stream_in *in)
+{
+    bool in_call_rec = false;
+    int ret = 0;
+
+    ret = voice_extn_is_in_call_rec_stream(in, &in_call_rec);
+    if (ret == -ENOSYS) {
+        in_call_rec = false;
+    }
+
+    return in_call_rec;
 }
 
 #ifdef MULTI_VOICE_SESSION_ENABLED

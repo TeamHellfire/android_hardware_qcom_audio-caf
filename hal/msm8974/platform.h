@@ -113,6 +113,7 @@ enum {
     SND_DEVICE_IN_VOICE_TTY_FULL_HEADSET_MIC,
     SND_DEVICE_IN_VOICE_TTY_VCO_HANDSET_MIC,
     SND_DEVICE_IN_VOICE_TTY_HCO_HEADSET_MIC,
+    SND_DEVICE_IN_VOICE_REC_HEADSET_MIC,
     SND_DEVICE_IN_VOICE_REC_MIC,
     SND_DEVICE_IN_VOICE_REC_MIC_NS,
     SND_DEVICE_IN_VOICE_REC_DMIC_STEREO,
@@ -286,7 +287,5 @@ struct platform_data {
 };/* Audio calibration related functions */
 #define SAMPLE_RATE_8KHZ  8000
 #define SAMPLE_RATE_16KHZ 16000
-int set_echo_reference(struct mixer *mixer, const char* ec_ref);
-
 
 #endif // QCOM_AUDIO_PLATFORM_H
